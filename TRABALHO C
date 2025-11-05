@@ -1,0 +1,288 @@
+ #include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+
+typedef struct {
+    int id_produto;
+    char nome[100];
+    float preco_custo;
+    float preco_venda;
+    int quantidade_estoque;
+} Produto;
+
+Produto *estoque = NULL;
+int tamanho_estoque = 0;
+
+void exibir_menu();
+void pausa();
+void liberar_memoria(Produto *e);
+
+
+void adicionar_produto(Produto **e_ptr, int *t_ptr);
+void listar_estoque(Produto *e, int t);
+int movimentar_estoque(Produto *e, int t, int operacao);
+void exibir_produto(Produto p);
+
+void ordenar_por_id(Produto *e, int t);
+int buscar_por_id_binaria(Produto *e, int t, int id_busca);
+int buscar_por_nome_sequencial(Produto *e, int t, const char *nome_busca);
+
+
+float calcular_valor_total_estoque(Produto *e, int t);
+
+int main() {
+    int opcao;
+    int id_busca, indice_encontrado;
+    char nome_busca[100];
+
+    do {
+        exibir_menu();
+        printf("Escolha uma opcao: ");
+        if (scanf("%d", &opcao) != 1) {
+            while (getchar() != '\n');
+            opcao = -1;
+        }
+
+        switch (opcao) {
+            case 1:
+                adicionar_produto(&estoque, &tamanho_estoque);
+                break;
+            case 2:
+                movimentar_estoque(estoque, tamanho_estoque, 1);
+                break;
+            case 3:
+                movimentar_estoque(estoque, tamanho_estoque, 0);
+                break;
+            case 4:
+                listar_estoque(estoque, tamanho_estoque);
+                break;
+            case 5:
+                if (tamanho_estoque > 0) {
+                    ordenar_por_id(estoque, tamanho_estoque);
+                    printf("\nEstoque ordenado por ID para Busca Binaria.\n");
+                    printf("ID do Produto para Busca Binaria: ");
+                    scanf("%d", &id_busca);
+                    indice_encontrado = buscar_por_id_binaria(estoque, tamanho_estoque, id_busca);
+                    if (indice_encontrado != -1) {
+                        printf("\n--- Produto Encontrado (Busca Binaria) ---\n");
+                        exibir_produto(estoque[indice_encontrado]);
+                    } else {
+                        printf("Produto com ID %d nao encontrado.\n", id_busca);
+                    }
+                } else {
+                    printf("Estoque vazio.\n");
+                }
+                break;
+            case 6:
+                printf("Nome do Produto para Busca Sequencial: ");
+                scanf(" %99[^\n]", nome_busca);
+                indice_encontrado = buscar_por_nome_sequencial(estoque, tamanho_estoque, nome_busca);
+                if (indice_encontrado != -1) {
+                    printf("\n--- Produto Encontrado (Busca Sequencial) ---\n");
+                    exibir_produto(estoque[indice_encontrado]);
+                } else {
+                    printf("Produto com nome '%s' nao encontrado.\n", nome_busca);
+                }
+                break;
+            case 7:
+                printf("\n--- Calculo de Valor Total (Recursivo) ---\n");
+                printf("Valor total de custo do estoque (Custo * Qtd): R$ %.2f\n",
+                        calcular_valor_total_estoque(estoque, tamanho_estoque));
+                break;
+            case 0:
+                printf("\nEncerrando o sistema. Memoria sera liberada.\n");
+                break;
+            default:
+                printf("Opcao invalida. Tente novamente.\n");
+        }
+        pausa();
+    } while (opcao != 0);
+
+    liberar_memoria(estoque);
+    return 0;
+}
+
+void exibir_menu() {
+    system("cls");
+    printf("========================================\n");
+    printf("  SISTEMA DE GERENCIAMENTO DE ESTOQUE\n");
+    printf("========================================\n");
+    printf("1. Adicionar Novo Produto \n");
+    printf("2. Reposicao de Estoque \n");
+    printf("3. Venda de Produto \n");
+    printf("4. Listar Todos os Produtos\n");
+    printf("5. Ordenar por ID e Buscar Binaria \n");
+    printf("6. Buscar por Nome \n");
+    printf("7. Calcular Valor Total do Estoque \n");
+    printf("0. Sair\n");
+    printf("========================================\n");
+}
+
+void exibir_produto(Produto p) {
+    printf("ID: %d\n", p.id_produto);
+    printf("Nome: %s\n", p.nome);
+    printf("Custo: R$ %.2f | Venda: R$ %.2f\n", p.preco_custo, p.preco_venda);
+    printf("Estoque Atual: %d\n", p.quantidade_estoque);
+    printf("----------------------------------------\n");
+}
+
+void adicionar_produto(Produto **e_ptr, int *t_ptr) {
+    Produto novo;
+    printf("\n--- Adicionar Produto ---\n");
+    novo.id_produto = *t_ptr + 1;
+
+    printf("Nome: ");
+    scanf(" %99[^\n]", novo.nome);
+
+    printf("Preco de Custo: ");
+    scanf("%f", &novo.preco_custo);
+
+    printf("Preco de Venda: ");
+    scanf("%f", &novo.preco_venda);
+
+    printf("Quantidade Inicial: ");
+    scanf("%d", &novo.quantidade_estoque);
+
+    *e_ptr = (Produto *)realloc(*e_ptr, (*t_ptr + 1) * sizeof(Produto));
+
+    if (*e_ptr == NULL) {
+        perror("Erro ao alocar memoria com realloc");
+        exit(EXIT_FAILURE);
+    }
+
+    (*e_ptr)[*t_ptr] = novo;
+    (*t_ptr)++;
+
+    printf("\nProduto '%s' (ID %d) adicionado com sucesso!\n", novo.nome, novo.id_produto);
+}
+
+int movimentar_estoque(Produto *e, int t, int operacao) {
+    int id, qtd, indice;
+    char *tipo = (operacao == 1) ? "REPOSICAO (ENTRADA)" : "VENDA (SAIDA)";
+
+    if (t == 0) {
+        printf("Estoque vazio.\n");
+        return -1;
+    }
+
+    printf("\n--- %s ---\n", tipo);
+    printf("Digite o ID do produto: ");
+    scanf("%d", &id);
+
+    indice = -1;
+    for (int i = 0; i < t; i++) {
+        if (e[i].id_produto == id) {
+            indice = i;
+            break;
+        }
+    }
+
+    if (indice == -1) {
+        printf("Produto com ID %d nao encontrado.\n", id);
+        return -1;
+    }
+
+    Produto *produto_ptr = &e[indice];
+
+    printf("Produto selecionado: %s. Estoque atual: %d\n", produto_ptr->nome, produto_ptr->quantidade_estoque);
+    printf("Quantidade a %s: ", (operacao == 1) ? "repor" : "vender");
+    scanf("%d", &qtd);
+
+    if (operacao == 0) {
+        if (produto_ptr->quantidade_estoque < qtd) {
+            printf("Erro: Quantidade insuficiente em estoque.\n");
+            return -1;
+        }
+
+        produto_ptr->quantidade_estoque -= qtd;
+
+        printf("Venda de %d unidades de '%s' registrada com sucesso.\n", qtd, produto_ptr->nome);
+    } else {
+
+        produto_ptr->quantidade_estoque += qtd;
+        printf("Reposicao de %d unidades de '%s' registrada com sucesso.\n", qtd, produto_ptr->nome);
+    }
+    printf("Novo estoque: %d\n", produto_ptr->quantidade_estoque);
+    return 0;
+}
+
+void listar_estoque(Produto *e, int t) {
+    printf("\n--- ESTOQUE ATUAL (%d Produtos) ---\n", t);
+    if (t == 0) {
+        printf("O estoque esta vazio.\n");
+        return;
+    }
+    for (int i = 0; i < t; i++) {
+        exibir_produto(e[i]);
+    }
+}
+
+void ordenar_por_id(Produto *e, int t) {
+    int i, j, indice_minimo;
+    Produto temp;
+
+    for (i = 0; i < t - 1; i++) {
+        indice_minimo = i;
+        for (j = i + 1; j < t; j++) {
+            if (e[j].id_produto < e[indice_minimo].id_produto) {
+                indice_minimo = j;
+            }
+        }
+        if (indice_minimo != i) {
+            temp = e[i];
+            e[i] = e[indice_minimo];
+            e[indice_minimo] = temp;
+        }
+    }
+}
+
+int buscar_por_id_binaria(Produto *e, int t, int id_busca) {
+    int inicio = 0;
+    int fim = t - 1;
+
+    while (inicio <= fim) {
+        int meio = inicio + (fim - inicio) / 2;
+
+        if (e[meio].id_produto == id_busca) {
+            return meio;
+        }
+
+        if (e[meio].id_produto < id_busca) {
+            inicio = meio + 1;
+        } else {
+            fim = meio - 1;
+        }
+    }
+    return -1;
+}
+
+int buscar_por_nome_sequencial(Produto *e, int t, const char *nome_busca) {
+    for (int i = 0; i < t; i++) {
+        if (strcmp(e[i].nome, nome_busca) == 0) {
+            return i;
+        }
+    }
+    return -1;
+}
+
+float calcular_valor_total_estoque(Produto *e, int t) {
+    if (t == 0) {
+        return 0.0;
+    }
+
+    float valor_atual = e[t - 1].preco_custo * e[t - 1].quantidade_estoque;
+
+    return valor_atual + calcular_valor_total_estoque(e, t - 1);
+}
+
+void liberar_memoria(Produto *e) {
+    if (e != NULL) {
+        free(e);
+    }
+}
+
+void pausa() {
+    printf("\nPressione ENTER para continuar...");
+    while (getchar() != '\n');
+    getchar();
+}
